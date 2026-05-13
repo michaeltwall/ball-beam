@@ -19,7 +19,7 @@ while True:
     cv.imshow('image', edges)
 
     k = cv.waitKey(30) & 0xFF
-    if k == 27:  # Escape key
+    if k == 27:
         break
 
 cv.destroyAllWindows()
