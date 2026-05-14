@@ -1,3 +1,6 @@
+import os
+os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
+
 import cv2 as cv
 import numpy as np
 import argparse
@@ -42,6 +45,10 @@ def main():
     else:
         cap = cv.VideoCapture(args.ci)
         wait_time = 10
+        
+    cap.set(cv.CAP_PROP_FPS, 60.0) 
+    cap.set(cv.CAP_PROP_FRAME_WIDTH,1920)
+    cap.set(cv.CAP_PROP_FRAME_HEIGHT,1080) 
 
     all_charuco_corners = []
     all_charuco_ids = []
