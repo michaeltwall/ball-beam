@@ -3,89 +3,69 @@ os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
 
 import numpy as np
 import cv2 as cv
-from filterpy.kalman import KalmanFilter
+from calibration/undistort.py import undistort
+
+def nothing(x):
+    pass
 
 cap = cv.VideoCapture(0)
+cap.set(cv.CAP_PROP_FPS, 60.0) 
+cap.set(cv.CAP_PROP_FRAME_WIDTH,1920)
+cap.set(cv.CAP_PROP_FRAME_HEIGHT,1080) 
+
+cv.namedWindow('display', cv.WINDOW_NORMAL)
+cv.resizeWindow('display', 640,360)
+
+cv.createTrackbar('hue_lower', 'display', 5, 179, nothing)
+cv.createTrackbar('hue_upper', 'display', 20, 179, nothing)
+# cv.createTrackbar('minRadius', 'display', 75, 200, nothing)
+# cv.createTrackbar('maxRadius', 'display', 120, 200, nothing)
+param1 = 100
+param2 = 15
+minRadius = 75
+maxRadius = 120
+
+kernel = cv.getStructuringElement(cv.MORPH_ELLIPSE, (11,11))
 
 if not cap.isOpened():
     print("Cannot open camera")
     exit()
 
-def nothing(x):
-    pass
-
-# Separate window for tuning Kalman parameters
-cv.namedWindow("Tuning", cv.WINDOW_NORMAL)
-
-# --- Trackbars for R (Measurement Noise) ---
-# Higher R means you trust the sensor LESS
-cv.createTrackbar("R_pos", "Tuning", 5, 200, nothing)    # x, y noise
-cv.createTrackbar("R_rad", "Tuning", 500, 2000, nothing)   # radius noise
-
-# --- Trackbars for Q (Process Noise) ---
-# Higher Q means the object can change direction/speed more erratically
-cv.createTrackbar("Q_pos", "Tuning", 1, 100, nothing)    # x, y, r uncertainty
-cv.createTrackbar("Q_rad", "Tuning", 1, 100, nothing)
-cv.createTrackbar("Q_vel", "Tuning", 1, 100, nothing)    # velocity uncertainty
-
-# Kalman filter:
-f = KalmanFilter (dim_x=6, dim_z=3)
-#f.x:  x, y, r, vx, vy, vr
-
-f.F = np.eye(6)
-f.F[0,3] = f.F[1,4] = f.F[2,5] = 1
-f.H = np.eye(3,6)
-f.P = np.diag([1,1,1,1,1,1])*500
-
-Z_meas = np.zeros([1,3])
-
 while True:
-
-    r_pos = cv.getTrackbarPos('R_pos', 'Tuning')
-    r_rad = cv.getTrackbarPos('R_rad', 'Tuning')
-    q_pos = cv.getTrackbarPos('Q_pos', 'Tuning') * 0.01
-    q_rad = cv.getTrackbarPos('Q_rad', 'Tuning') * 0.01
-    q_vel = cv.getTrackbarPos('Q_vel', 'Tuning') * 0.01
-
-    # 2. Update R Matrix (Measurement Noise)
-    # R is 3x3: [x, y, radius]
-    f.R = np.diag([r_pos, r_pos, r_rad])
-
-    # 3. Update Q Matrix (Process Noise)
-    # Q is 6x6: [x, y, r, vx, vy, vr]
-    # We apply q_pos to positions and q_vel to velocities
-    f.Q = np.diag([q_pos, q_pos, q_pos, q_vel, q_vel, q_vel])
-
     ret, frame = cap.read()
     if not ret:
         print("Can't receive frame")
         break
 
-    gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-    blur = cv.GaussianBlur(gray,(5,5),0)
-    _,thresh = cv.threshold(blur,0,255,cv.THRESH_BINARY+cv.THRESH_OTSU)
+    frame = undistort(frame)
 
-    rows = thresh.shape[0]
-    circles = cv.HoughCircles(thresh, cv.HOUGH_GRADIENT, 1, rows / 8,
-                               param1=100, param2=15,
-                               minRadius=25, maxRadius=50)
     
-    f.predict()
-    
-    if circles is not None:
-        circles = np.uint16(np.around(circles))
-        Z_meas = circles[0,0,:]  # measures the first (most likely) circle
-        f.update(Z_meas)
+    lower_hue = cv.getTrackbarPos('hue_lower', 'display')
+    upper_hue = cv.getTrackbarPos('hue_upper', 'display')
 
-    # circle center
-    center = tuple(f.x[:2, 0].astype(int))
-    cv.circle(frame, center, 1, (0, 100, 100), 3)
-    # circle outline
-    radius = f.x[2,0].astype(int)
-    cv.circle(frame, center, radius, (255, 0, 255), 3)
+    # define range of blue color in HSV
+    lower = np.array([lower_hue,80,80])
+    upper = np.array([upper_hue,255,255])
 
-    cv.imshow("threshold", thresh)
-    cv.imshow("circle detect", frame)
+    blur_frame = cv.GaussianBlur(frame, (9,9), 0)
+    hsv = cv.cvtColor(blur_frame, cv.COLOR_BGR2HSV)
+    mask = cv.inRange(hsv, lower, upper)
+    opening = cv.morphologyEx(mask, cv.MORPH_OPEN, kernel)
+    edge_blur = cv.GaussianBlur(opening, (5,5), 0)
+    _, thresh = cv.threshold(edge_blur, 127, 255, cv.THRESH_BINARY)
+
+    contours, _ = cv.findContours(opening, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+    if contours:
+        c = max(contours, key=cv.contourArea)
+        ((x, y), r) = cv.minEnclosingCircle(c)
+        
+        if r > minRadius:  # filter out tiny noise contours
+            cx, cy, cr = int(x), int(y), int(r)
+            cv.circle(frame, (cx, cy), cr, (0, 255, 0), 2)      # outline
+            cv.circle(frame, (cx, cy), 4, (0, 0, 255), -1)      # center dot
+
+    cv.imshow('display', opening)
+    cv.imshow('display2', frame)
 
     if cv.waitKey(1) == 27:
         break
