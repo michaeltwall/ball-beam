@@ -13,7 +13,7 @@ x, y, w, h = roi
 #     print("Cannot open camera")
 #     exit()
 
-def undistort(input)
+def undistort(input):
 
     dst = cv.undistort(input, mtx, dist, None, newcameramtx)
     dst = dst[y:y+h, x:x+w]
