@@ -32,7 +32,7 @@ cap.set(cv.CAP_PROP_FRAME_HEIGHT,1080)
 cv.namedWindow('mask', cv.WINDOW_NORMAL)
 cv.resizeWindow('mask', 640,400)
 
-cv.createTrackbar('hue_lower', 'mask', 25, 179, nothing)
+cv.createTrackbar('hue_lower', 'mask', 20, 179, nothing)
 cv.createTrackbar('hue_upper', 'mask', 35, 179, nothing)
 cv.createTrackbar('min_sat', 'mask', 60, 255, nothing)
 cv.createTrackbar('min_value', 'mask', 95, 255, nothing)
