@@ -5,82 +5,55 @@
 #include <SimpleKalmanFilter.h>
 #include <math.h>
 
-// ======================================================
-// Hardware
-// ======================================================
-
 #define DEV_I2C Wire
 #define SerialPort Serial
 
 VL53L4CD sensor(&DEV_I2C, A1);
 Servo servo;
 
-// ======================================================
-// Control Timing
-// ======================================================
 
-// 20 Hz control loop
+// 20Hz control loop
 constexpr double dt = 0.05;
-constexpr uint32_t CONTROL_PERIOD_US = 50000;
+constexpr uint32_t CONTROL_PERIOD_US = (uint32_t)(dt * 1e6);
 
 uint32_t last_control_us = 0;
 
-// ======================================================
-// Servo
-// ======================================================
-
+// servo stuff
 constexpr double servo_center = 93.5;
 double servo_range  = 32.0;
 
-// ======================================================
-// PID Gains
-// ======================================================
-
-// Negative because your plant polarity is inverted
+// PID gains
 double kp = 0.15;
-double ki =  0.0;     // START WITH ZERO
+double ki =  0.0;     // integral has been weird :(
 double kd = 0.17;
 
-// ======================================================
-// Controller State
-// ======================================================
-
+// Constant controller reference
 double setpoint = 130.0;
 
-double integral = 0.0;
+double i = 0.0; // integral
 double prev_position = 130.0;
 
-double control_output = 0.0;
+// Output of PID
+double output = 0.0;
 
-// ======================================================
-// Sensor State
-// ======================================================
-
+// Sensor state data
 int raw_pos = 0;
-double filtered_pos = 130.0;
+double filtered_pos = 0.0;
 
-// ======================================================
-// Kalman Filter
-// ======================================================
-
+// Kalman filter stuff
 float kfq = 0.35;
 SimpleKalmanFilter kf(2, 2, kfq);
 
-// ======================================================
-// Serial Parser
-// ======================================================
-
+// Serial parser for PID tuning through serial
 #define BUF_SIZE 64
 char serialBuf[BUF_SIZE];
 uint8_t bufIdx = 0;
-
-void parseSerial()
-{
+void parseSerial() {
     while (SerialPort.available())
     {
         char c = SerialPort.read();
 
-        if (c == '\n' || c == '\r')
+        if (c == '\n' || c == '\r')\
         {
             if (bufIdx == 0) return;
 
@@ -99,7 +72,6 @@ void parseSerial()
 
                 return;
             }
-
             if (sscanf(serialBuf, "%15[^= ] = %lf", key, &val) == 2 ||
                 sscanf(serialBuf, "%15[^=]=%lf", key, &val) == 2)
             {
@@ -133,14 +105,12 @@ void parseSerial()
                         setpoint
                     );
                 }
-                else
-                {
+                else {
                     SerialPort.printf("Unknown key: %s\n", key);
                 }
             }
         }
-        else
-        {
+        else {
             if (bufIdx < BUF_SIZE - 1)
             {
                 serialBuf[bufIdx++] = c;
@@ -149,12 +119,8 @@ void parseSerial()
     }
 }
 
-// ======================================================
-// Sensor Update
-// ======================================================
-
-void updateSensor()
-{
+// Sensor update
+void updateSensor() {
     uint8_t ready = 0;
 
     sensor.VL53L4CD_CheckForDataReady(&ready);
@@ -173,106 +139,59 @@ void updateSensor()
     filtered_pos = kf.updateEstimate(raw_pos);
 }
 
-// ======================================================
-// Controller
-// ======================================================
+// Controller function
+void runController() {
+    // error calculation
+    double e = filtered_pos - setpoint;
 
-void runController()
-{
-    double error = filtered_pos - setpoint;
-
-    // ------------------------------------------
-    // Derivative on measurement
-    // ------------------------------------------
-
-    double velocity =
-        (filtered_pos - prev_position) / dt;
+    // derivative (velocity) calc
+    double v = (filtered_pos - prev_position) / dt;
 
     prev_position = filtered_pos;
 
-    // ------------------------------------------
-    // Candidate integral
-    // ------------------------------------------
+    // integral calc
+    double i = integral + (e * dt);
 
-    double new_integral =
-        integral + (error * dt);
+    // unsaturated controller output
+    double unsat = (kp * e) + (ki * i) - (kd * v);
 
-    // ------------------------------------------
-    // Unsaturated controller output
-    // ------------------------------------------
+    // saturated output
+    output = constrain(unsat,-servo_range,servo_range);
 
-    double unsat =
-        (kp * error) +
-        (ki * new_integral) -
-        (kd * velocity);
-
-    // ------------------------------------------
-    // Saturation
-    // ------------------------------------------
-
-    double output =
-        constrain(unsat,
-                  -servo_range,
-                   servo_range);
-
-    // ------------------------------------------
     // Anti-windup
-    // ------------------------------------------
-
-    if ((output == unsat) ||
-        (output >= servo_range  && error < 0) ||
-        (output <= -servo_range && error > 0))
+    bool helps_unsaturate =
+        ((unsat > servo_range)  && (e < 0)) ||
+        ((unsat < -servo_range) && (e > 0));
+    if ((fabs(unsat) < servo_range) || helps_unsaturate)
     {
-        integral = new_integral;
+        integral = i;
     }
 
-    // Explicit integral clamp
-    integral = constrain(integral, -300.0, 300.0);
+    // integral clamp
+    integral = constrain(integral, -100, 100);
 
-    // ------------------------------------------
-    // Servo command
-    // ------------------------------------------
-
-    control_output = output;
-
-    servo.write(servo_center + output);
-
-    // ------------------------------------------
     // Debug telemetry
-    // ------------------------------------------
-
     static int decimate = 0;
-
     if (++decimate >= 5)
     {
         decimate = 0;
-
         SerialPort.print(setpoint);
         SerialPort.print(",");
-
         SerialPort.print(raw_pos);
         SerialPort.print(",");
-
         SerialPort.print(filtered_pos);
         SerialPort.print(",");
-
-        SerialPort.print(error);
+        SerialPort.print(e);
         SerialPort.print(",");
-
-        SerialPort.print(velocity);
+        SerialPort.print(v);
         SerialPort.print(",");
-
         SerialPort.print(integral);
         SerialPort.print(",");
-
         SerialPort.println(output);
     }
 }
 
-// ======================================================
 // Setup
-// ======================================================
-
 void setup()
 {
     SerialPort.begin(115200);
@@ -303,24 +222,21 @@ void setup()
     delay(1000);
 }
 
-// ======================================================
 // Main Loop
-// ======================================================
-
 void loop()
 {
     parseSerial();
 
-    // asynchronous sensor updates
+    // sensor update
     updateSensor();
 
-    // fixed-rate controller
+    // controller timing
     uint32_t now = micros();
-
     if (now - last_control_us >= CONTROL_PERIOD_US)
     {
         last_control_us += CONTROL_PERIOD_US;
 
         runController();
+        servo.write(servo_center + output);
     }
 }
