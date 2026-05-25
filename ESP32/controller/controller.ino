@@ -19,7 +19,7 @@ constexpr uint32_t CONTROL_PERIOD_US = (uint32_t)(dt * 1e6);
 uint32_t last_control_us = 0;
 
 // servo stuff
-constexpr double servo_center = 93.5;
+double servo_center = 95;
 double servo_range  = 32.0;
 
 // PID gains
@@ -30,7 +30,7 @@ double kd = 0.17;
 // Constant controller reference
 double setpoint = 130.0;
 
-double i = 0.0; // integral
+double integral = 0.0; // integral
 double prev_position = 130.0;
 
 // Output of PID
@@ -95,6 +95,17 @@ void parseSerial() {
                     servo_range = val;
                     SerialPort.printf("range = %.4f\n", servo_range);
                 }
+                else if (strcmp(key, "kfq") == 0)
+                {
+                    kfq = val;
+                    SimpleKalmanFilter kf(2, 2, kfq);
+                    SerialPort.printf("kfq = %.4f\n", kfq);
+                }
+                else if (strcmp(key, "center") == 0)
+                {
+                    servo_center = val;
+                    SerialPort.printf("servo_center = %.4f\n", servo_center);
+                }
                 else if (strcmp(key, "sp") == 0)
                 {
                     setpoint = val;
@@ -153,7 +164,7 @@ void runController() {
     double i = integral + (e * dt);
 
     // unsaturated controller output
-    double unsat = (kp * e) + (ki * i) - (kd * v);
+    double unsat = (kp * e) + (ki * i) + (kd * v);
 
     // saturated output
     output = constrain(unsat,-servo_range,servo_range);
@@ -168,7 +179,7 @@ void runController() {
     }
 
     // integral clamp
-    integral = constrain(integral, -100, 100);
+    integral = constrain(integral, -500, 500);
 
     // Debug telemetry
     static int decimate = 0;
@@ -177,15 +188,15 @@ void runController() {
         decimate = 0;
         SerialPort.print(setpoint);
         SerialPort.print(",");
-        SerialPort.print(raw_pos);
-        SerialPort.print(",");
+        // SerialPort.print(raw_pos);
+        // SerialPort.print(",");
         SerialPort.print(filtered_pos);
         SerialPort.print(",");
-        SerialPort.print(e);
+        SerialPort.print((kp * e));
         SerialPort.print(",");
-        SerialPort.print(v);
+        SerialPort.print((ki * i));
         SerialPort.print(",");
-        SerialPort.print(integral);
+        SerialPort.print((kd * v));
         SerialPort.print(",");
         SerialPort.println(output);
     }
