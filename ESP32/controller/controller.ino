@@ -19,16 +19,16 @@ constexpr uint32_t CONTROL_PERIOD_US = (uint32_t)(dt * 1e6);
 uint32_t last_control_us = 0;
 
 // servo stuff
-double servo_center = 95;
-double servo_range  = 32.0;
+double servo_center = 93;
+double servo_range  = 25.0;
 
 // PID gains
-double kp = 0.15;
-double ki =  0.0;     // integral has been weird :(
-double kd = 0.17;
+double kp = 0.09;
+double ki =  0.05;     // integral has been weird :(
+double kd = 0.12;
 
 // Constant controller reference
-double setpoint = 130.0;
+double setpoint = 120.0;
 
 double integral = 0.0; // integral
 double prev_position = 130.0;
@@ -41,7 +41,7 @@ int raw_pos = 0;
 double filtered_pos = 0.0;
 
 // Kalman filter stuff
-float kfq = 0.35;
+float kfq = 0.38;
 SimpleKalmanFilter kf(2, 2, kfq);
 
 // Serial parser for PID tuning through serial
@@ -170,16 +170,18 @@ void runController() {
     output = constrain(unsat,-servo_range,servo_range);
 
     // Anti-windup
-    bool helps_unsaturate =
-        ((unsat > servo_range)  && (e < 0)) ||
-        ((unsat < -servo_range) && (e > 0));
-    if ((fabs(unsat) < servo_range) || helps_unsaturate)
-    {
-        integral = i;
+    if (ki != 0){
+        bool helps_unsaturate =
+            ((unsat > servo_range)  && (e < 0)) ||
+            ((unsat < -servo_range) && (e > 0));
+        if ((fabs(unsat) < servo_range) || helps_unsaturate)
+        {
+            integral = i;
+        }
+        // integral clamp
+        float limit = abs(15/ki);
+        integral = constrain(integral, -limit, limit);
     }
-
-    // integral clamp
-    integral = constrain(integral, -500, 500);
 
     // Debug telemetry
     static int decimate = 0;
@@ -188,8 +190,8 @@ void runController() {
         decimate = 0;
         SerialPort.print(setpoint);
         SerialPort.print(",");
-        // SerialPort.print(raw_pos);
-        // SerialPort.print(",");
+        SerialPort.print(raw_pos);
+        SerialPort.print(",");
         SerialPort.print(filtered_pos);
         SerialPort.print(",");
         SerialPort.print((kp * e));
