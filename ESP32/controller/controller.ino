@@ -33,6 +33,10 @@ double setpoint = 120.0;
 double integral = 0.0; // integral
 double prev_position = 130.0;
 
+float cv_pos = 0.0;
+bool send_filtered = false;
+bool control_use_cv = true;
+
 // Output of PID
 double output = 0.0;
 
@@ -45,88 +49,48 @@ float kfq = 0.38;
 SimpleKalmanFilter kf(2, 2, kfq);
 
 // Serial parser for PID tuning through serial
-#define BUF_SIZE 64
-char serialBuf[BUF_SIZE];
-uint8_t bufIdx = 0;
+String input_buffer = "";
+unsigned long last_receive_time = 0;
+const unsigned long TIMEOUT_MS = 500;
+bool cv_receiving = false;
 void parseSerial() {
-    while (SerialPort.available())
-    {
-        char c = SerialPort.read();
-
-        if (c == '\n' || c == '\r')\
-        {
-            if (bufIdx == 0) return;
-
-            serialBuf[bufIdx] = '\0';
-            bufIdx = 0;
-
-            double val;
-            char key[16];
-
-            if (strncmp(serialBuf, "print", 5) == 0)
-            {
-                SerialPort.printf(
-                    "kp=%.4f ki=%.4f kd=%.4f sp=%.2f range=%.2f\n",
-                    kp, ki, kd, setpoint, servo_range
-                );
-
-                return;
-            }
-            if (sscanf(serialBuf, "%15[^= ] = %lf", key, &val) == 2 ||
-                sscanf(serialBuf, "%15[^=]=%lf", key, &val) == 2)
-            {
-                if (strcmp(key, "kp") == 0)
-                {
-                    kp = val;
-                    SerialPort.printf("kp = %.4f\n", kp);
-                }
-                else if (strcmp(key, "ki") == 0)
-                {
-                    ki = val;
-                    SerialPort.printf("ki = %.4f\n", ki);
-                }
-                else if (strcmp(key, "kd") == 0)
-                {
-                    kd = val;
-                    SerialPort.printf("kd = %.4f\n", kd);
-                }
-                else if (strcmp(key, "range") == 0)
-                {
-                    servo_range = val;
-                    SerialPort.printf("range = %.4f\n", servo_range);
-                }
-                else if (strcmp(key, "kfq") == 0)
-                {
-                    kfq = val;
-                    SimpleKalmanFilter kf(2, 2, kfq);
-                    SerialPort.printf("kfq = %.4f\n", kfq);
-                }
-                else if (strcmp(key, "center") == 0)
-                {
-                    servo_center = val;
-                    SerialPort.printf("servo_center = %.4f\n", servo_center);
-                }
-                else if (strcmp(key, "sp") == 0)
-                {
-                    setpoint = val;
-                    integral = 0.0;
-
-                    SerialPort.printf(
-                        "sp = %.2f (integral reset)\n",
-                        setpoint
-                    );
-                }
-                else {
-                    SerialPort.printf("Unknown key: %s\n", key);
-                }
-            }
+    while (Serial.available() > 0) {
+        char c = Serial.read();
+        
+        if (c == '\n') {
+        processMessage(input_buffer);
+        input_buffer = "";
+        } else {
+        input_buffer += c;
         }
-        else {
-            if (bufIdx < BUF_SIZE - 1)
-            {
-                serialBuf[bufIdx++] = c;
-            }
+    }
+}
+
+void processMessage(String msg) {
+    msg.trim(); // strip \r and whitespace
+    cv_pos = msg.toFloat();
+    last_receive_time = millis();
+
+    int pipe_index = msg.indexOf('|');
+  
+    if (pipe_index != -1) {
+        float cv_pos = msg.substring(0, pipe_index).toFloat();
+        String command = msg.substring(pipe_index + 1);
+
+        if (command.length() > 0) {
+            handleCommand(command);
         }
+    } else {
+    // no delimiter, plain value
+    float cv_pos = msg.toFloat();
+    }
+}
+
+void handleCommand(String cmd) {
+    if (cmd == "switch_send") {
+        send_filtered = !send_filtered;
+    } else if (cmd == "switch_control") {
+        control_use_cv = !control_use_cv;
     }
 }
 
@@ -148,17 +112,25 @@ void updateSensor() {
     raw_pos = results.distance_mm;
 
     filtered_pos = kf.updateEstimate(raw_pos);
+    static int decimate = 0;
+    if (++decimate >= 5)
+    {
+        decimate = 0;
+        SerialPort.println(send_filtered ? filtered_pos : raw_pos);
+    }
 }
 
 // Controller function
 void runController() {
     // error calculation
-    double e = filtered_pos - setpoint;
+    double p = (cv_receiving && control_use_cv) ? cv_pos : filtered_pos;
+    
+    double e = p - setpoint;
 
     // derivative (velocity) calc
-    double v = (filtered_pos - prev_position) / dt;
+    double v = (p - prev_position) / dt;
 
-    prev_position = filtered_pos;
+    prev_position = p;
 
     // integral calc
     double i = integral + (e * dt);
@@ -171,10 +143,8 @@ void runController() {
 
     // Anti-windup
     if (ki != 0){
-        bool helps_unsaturate =
-            ((unsat > servo_range)  && (e < 0)) ||
-            ((unsat < -servo_range) && (e > 0));
-        if ((fabs(unsat) < servo_range) || helps_unsaturate)
+        if ((fabs(unsat) < servo_range) || ((unsat > servo_range)  && (e < 0)) ||
+            ((unsat < -servo_range) && (e > 0)))
         {
             integral = i;
         }
@@ -184,24 +154,19 @@ void runController() {
     }
 
     // Debug telemetry
-    static int decimate = 0;
-    if (++decimate >= 5)
-    {
-        decimate = 0;
-        SerialPort.print(setpoint);
-        SerialPort.print(",");
-        SerialPort.print(raw_pos);
-        SerialPort.print(",");
-        SerialPort.print(filtered_pos);
-        SerialPort.print(",");
-        SerialPort.print((kp * e));
-        SerialPort.print(",");
-        SerialPort.print((ki * i));
-        SerialPort.print(",");
-        SerialPort.print((kd * v));
-        SerialPort.print(",");
-        SerialPort.println(output);
-    }
+        // SerialPort.print(setpoint);
+        // SerialPort.print(",");
+        // SerialPort.print(raw_pos);
+        // SerialPort.print(",");
+        // SerialPort.print(filtered_pos);
+        // SerialPort.print(",");
+        // SerialPort.print((kp * e));
+        // SerialPort.print(",");
+        // SerialPort.print((ki * i));
+        // SerialPort.print(",");
+        // SerialPort.print((kd * v));
+        // SerialPort.print(",");
+        // SerialPort.println(output);
 }
 
 // Setup
@@ -239,6 +204,7 @@ void setup()
 void loop()
 {
     parseSerial();
+    cv_receiving = (millis() - last_receive_time) < TIMEOUT_MS;
 
     // sensor update
     updateSensor();
