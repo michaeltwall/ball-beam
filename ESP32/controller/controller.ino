@@ -13,7 +13,7 @@ Servo servo;
 
 
 // 20Hz control loop
-constexpr double dt = 0.05;
+constexpr double dt = 0.1;
 constexpr uint32_t CONTROL_PERIOD_US = (uint32_t)(dt * 1e6);
 
 uint32_t last_control_us = 0;
@@ -113,9 +113,11 @@ void updateSensor() {
 
     filtered_pos = kf.updateEstimate(raw_pos);
     static int decimate = 0;
-    if (++decimate >= 5)
+    if (++decimate >= 1)
     {
         decimate = 0;
+        // SerialPort.print(filtered_pos);
+        // SerialPort.print(',');
         SerialPort.println(send_filtered ? filtered_pos : raw_pos);
     }
 }
@@ -184,7 +186,7 @@ void setup()
     sensor.InitSensor();
 
     // 50 ms timing budget
-    sensor.VL53L4CD_SetRangeTiming(50, 0);
+    sensor.VL53L4CD_SetRangeTiming(CONTROL_PERIOD_US*1000, 0);
 
     sensor.VL53L4CD_StartRanging();
 
