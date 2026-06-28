@@ -19,19 +19,19 @@ constexpr uint32_t CONTROL_PERIOD_US = (uint32_t)(dt * 1e6);
 uint32_t last_control_us = 0;
 
 // servo stuff
-double servo_center = 93;
+double servo_center = 89;
 double servo_range  = 25.0;
 
 // PID gains
-double kp = 0.09;
-double ki =  0.05;     // integral has been weird :(
-double kd = 0.12;
+double kp = 0.24;
+double ki =  0.00;     // integral has been weird :(
+double kd = 0.15;
 
 // Constant controller reference
-double setpoint = 120.0;
+double setpoint = 170.0;
 
-double integral = 0.0; // integral
-double prev_position = 130.0;
+double i = 0.0; // integral
+double prev_position = 150.0;
 
 float cv_pos = 0.0;
 bool send_filtered = false;
@@ -45,7 +45,7 @@ int raw_pos = 0;
 double filtered_pos = 0.0;
 
 // Kalman filter stuff
-float kfq = 0.38;
+float kfq = 0.18;
 SimpleKalmanFilter kf(2, 2, kfq);
 
 // Serial parser for PID tuning through serial
@@ -131,29 +131,15 @@ void runController() {
 
     // derivative (velocity) calc
     double v = (p - prev_position) / dt;
-
     prev_position = p;
 
     // integral calc
-    double i = integral + (e * dt);
+    i = integral + (e * dt);
 
     // unsaturated controller output
     double unsat = (kp * e) + (ki * i) + (kd * v);
-
     // saturated output
     output = constrain(unsat,-servo_range,servo_range);
-
-    // Anti-windup
-    if (ki != 0){
-        if ((fabs(unsat) < servo_range) || ((unsat > servo_range)  && (e < 0)) ||
-            ((unsat < -servo_range) && (e > 0)))
-        {
-            integral = i;
-        }
-        // integral clamp
-        float limit = abs(15/ki);
-        integral = constrain(integral, -limit, limit);
-    }
 
     // Debug telemetry
         // SerialPort.print(setpoint);

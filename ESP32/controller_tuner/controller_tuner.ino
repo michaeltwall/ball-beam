@@ -21,19 +21,19 @@ uint32_t DT_US = static_cast<uint32_t>((dt * 1e6f) + 0.5f);
 uint32_t last_control_us = 0;
 
 // servo stuff
-double servo_center = 92;
+double servo_center = 89;
 double servo_range  = 25.0;
 
 // PID gains
-double kp = 0.12;
+double kp = 0.24;
 double ki =  0.0;     // integral has been weird :(
 double kd = 0.15;
 
-float alpha = 0.2;  // 0.0 = frozen, 1.0 = unfiltered
+double i;
 float v_filtered = 0;
 
 // Constant controller reference
-double setpoint = 140.0;
+double setpoint = 170.0;
 
 double integral = 0.0; // integral
 double prev_position = 150.0;
@@ -121,10 +121,6 @@ void parseSerial() {
                     DT_US = static_cast<uint32_t>((dt * 1e6f) + 0.5f);
                     SerialPort.printf("dt = %.4f\n", dt);
                 }
-                else if (strcmp(key, "alpha") == 0) {
-                    alpha = val;
-                    SerialPort.printf("alpha = %.4f\n", alpha);
-                }
                 else {
                     SerialPort.printf("Unknown key: %s\n", key);
                 }
@@ -173,7 +169,7 @@ void runController() {
     prev_position = filtered_pos;
 
     // integral calc
-    double i = integral + (e * dt);
+    i = i + (e * dt);
 
     // unsaturated controller output
     double unsat = (kp * e) + (ki * i) + (kd * v_raw);
@@ -182,17 +178,17 @@ void runController() {
     output = constrain(unsat,-servo_range,servo_range);
 
     // Anti-windup
-    if (ki != 0){
-        bool helps_unsaturate =
-            ((unsat > servo_range)  && (e < 0)) ||
-            ((unsat < -servo_range) && (e > 0));
-        if ((fabs(unsat) < servo_range) || helps_unsaturate) {
-            integral = i;
-        }
-        // integral clamp
-        float limit = abs(15/ki);
-        integral = constrain(integral, -limit, limit);
-    }
+    // if (ki != 0){
+    //     bool helps_unsaturate =
+    //         ((unsat > servo_range)  && (e < 0)) ||
+    //         ((unsat < -servo_range) && (e > 0));
+    //     if ((fabs(unsat) < servo_range) || helps_unsaturate) {
+    //         integral = i;
+    //     }
+    //     // integral clamp
+    //     float limit = abs(15/ki);
+    //     integral = constrain(integral, -limit, limit);
+    // }
 
     // Debug telemetry
     static int decimate = 0;
