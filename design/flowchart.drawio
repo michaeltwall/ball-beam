@@ -25,7 +25,7 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="Nv_6V1SDtf4vh-nOe4OJ-3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Verdana;labelBackgroundColor=none;" value="&lt;div&gt;PID Controller&lt;/div&gt;" vertex="1">
-          <mxGeometry height="60" width="120" x="180" y="260" as="geometry" />
+          <mxGeometry height="60" width="120" x="170" y="260" as="geometry" />
         </mxCell>
         <mxCell id="Nv_6V1SDtf4vh-nOe4OJ-6" edge="1" parent="1" source="Nv_6V1SDtf4vh-nOe4OJ-4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;fontFamily=Verdana;labelBackgroundColor=none;fontColor=default;">
           <mxGeometry relative="1" as="geometry">
@@ -33,7 +33,7 @@
           </mxGeometry>
         </mxCell>
         <mxCell id="Nv_6V1SDtf4vh-nOe4OJ-4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fontFamily=Verdana;labelBackgroundColor=none;" value="Servo motor" vertex="1">
-          <mxGeometry height="60" width="120" x="390" y="260" as="geometry" />
+          <mxGeometry height="60" width="120" x="380" y="260" as="geometry" />
         </mxCell>
         <mxCell id="Nv_6V1SDtf4vh-nOe4OJ-12" edge="1" parent="1" source="Nv_6V1SDtf4vh-nOe4OJ-22" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;fontFamily=Verdana;labelBackgroundColor=none;fontColor=default;" target="Nv_6V1SDtf4vh-nOe4OJ-1">
           <mxGeometry relative="1" as="geometry" />
