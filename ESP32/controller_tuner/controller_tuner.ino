@@ -25,9 +25,9 @@ double servo_center = 89;
 double servo_range  = 25.0;
 
 // PID gains
-double kp = 0.24;
-double ki =  0.0;     // integral has been weird :(
-double kd = 0.15;
+double kp = 0.3;
+double ki =  0.15;
+double kd = 0.2;
 
 double i;
 float v_filtered = 0;
@@ -163,16 +163,22 @@ void runController() {
     double e = filtered_pos - setpoint;
 
     // derivative (velocity) calc
-    float v_raw = ( filtered_pos - prev_position) / dt;
-    // v_filtered = alpha * v_raw + (1 - alpha) * v_filtered;
+    float v = ( filtered_pos - prev_position) / dt;
+    // v_filtered = alpha * v + (1 - alpha) * v_filtered;
 
     prev_position = filtered_pos;
 
-    // integral calc
-    i = i + (e * dt);
+    // integral calc:
+    // Conditions for integral: if moving, i = 0. Else, if error is not small then update, if e is small then no change. 
+    if (abs(v) > 50)
+        i = 0
+        ;
+    else if (abs(e) > 10)
+        i = i + (e * dt);
+
 
     // unsaturated controller output
-    double unsat = (kp * e) + (ki * i) + (kd * v_raw);
+    double unsat = (kp * e) + (ki * i) + (kd * v);
 
     // saturated output
     output = constrain(unsat,-servo_range,servo_range);
@@ -200,11 +206,11 @@ void runController() {
         SerialPort.print(",");
         SerialPort.print(filtered_pos);
         SerialPort.print(",");
-        SerialPort.print((kp * e));
+        SerialPort.print((e));
         SerialPort.print(",");
-        SerialPort.print((ki * i));
+        SerialPort.print((i));
         SerialPort.print(",");
-        SerialPort.print((kd * v_filtered));
+        SerialPort.print((v));
         SerialPort.print(",");
         SerialPort.println(output);
     }

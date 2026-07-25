@@ -12,10 +12,11 @@ VL53L4CD sensor(&DEV_I2C, A1);
 Servo servo;
 
 
-// 20Hz control loop
-constexpr double dt = 0.1;
-constexpr uint32_t CONTROL_PERIOD_US = (uint32_t)(dt * 1e6);
-
+//control loop timing
+float dt = 0.05;  // sec
+float tof_time = 0.025 *1e3; // ms
+const uint32_t control_freq = static_cast<uint32_t>(1.0f / dt); // Frequency in Hz -> 20 Hz
+uint32_t DT_US = static_cast<uint32_t>((dt * 1e6f) + 0.5f);
 uint32_t last_control_us = 0;
 
 // servo stuff
@@ -23,9 +24,9 @@ double servo_center = 89;
 double servo_range  = 25.0;
 
 // PID gains
-double kp = 0.24;
-double ki =  0.00;     // integral has been weird :(
-double kd = 0.15;
+double kp = 0.3;
+double ki =  0.15;
+double kd = 0.2;
 
 // Constant controller reference
 double setpoint = 170.0;
@@ -133,8 +134,20 @@ void runController() {
     double v = (p - prev_position) / dt;
     prev_position = p;
 
-    // integral calc
-    i = integral + (e * dt);
+    // integral calc:
+    // Conditions for integral: if moving, i = 0. Else, if error is not small then update, if e is small then no change. 
+    if (abs(v) > 50)
+        i = 0
+        ;
+    else if (abs(e) > 10)
+        i = i + (e * dt);
+
+    // integral calc:
+    // Conditions for integral: e is above range, AND v <is very small or 0>
+    if (abs(e) < 5 && abs(v) < 50)
+        i = i + (e * dt);
+    else
+        i = 0;
 
     // unsaturated controller output
     double unsat = (kp * e) + (ki * i) + (kd * v);
@@ -171,8 +184,7 @@ void setup()
     sensor.VL53L4CD_Off();
     sensor.InitSensor();
 
-    // 50 ms timing budget
-    sensor.VL53L4CD_SetRangeTiming(CONTROL_PERIOD_US*1000, 0);
+    sensor.VL53L4CD_SetRangeTiming(tof_time-5, 5);
 
     sensor.VL53L4CD_StartRanging();
 
@@ -199,10 +211,13 @@ void loop()
 
     // controller timing
     uint32_t now = micros();
-    if (now - last_control_us >= CONTROL_PERIOD_US)
+    if (now - last_control_us >= DT_US)
     {
-        last_control_us += CONTROL_PERIOD_US;
+        last_control_us = now;
 
+        // sensor update
+        updateSensor();
+        
         runController();
         servo.write(servo_center + output);
     }
