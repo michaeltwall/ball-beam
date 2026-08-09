@@ -9,7 +9,7 @@ from PyQt6.QtCore import QTimer, Qt
 
 # --- CONFIGURATION ---
 SERIAL_PORT = 'COM5'     # Change to your port (e.g., '/dev/ttyUSB0')
-BAUD_RATE = 9600
+BAUD_RATE = 115200
 MAX_POINTS = 200
 HISTORY_SECONDS = 10    # how much history to show
 

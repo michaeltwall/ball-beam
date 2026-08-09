@@ -137,17 +137,10 @@ void runController() {
     // integral calc:
     // Conditions for integral: if moving, i = 0. Else, if error is not small then update, if e is small then no change. 
     if (abs(v) > 50)
-        i = 0
-        ;
+        i = 0;
     else if (abs(e) > 10)
         i = i + (e * dt);
 
-    // integral calc:
-    // Conditions for integral: e is above range, AND v <is very small or 0>
-    if (abs(e) < 5 && abs(v) < 50)
-        i = i + (e * dt);
-    else
-        i = 0;
 
     // unsaturated controller output
     double unsat = (kp * e) + (ki * i) + (kd * v);
